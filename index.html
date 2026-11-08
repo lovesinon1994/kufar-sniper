@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Kufar Sniper</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Цвета берутся из темы Telegram (--tg-theme-*); значения после запятой — запасные для браузера */
+  :root {
+    --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+    --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+    --text: var(--tg-theme-text-color, #000000);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --link: var(--tg-theme-link-color, #007aff);
+    --accent: var(--tg-theme-button-color, #007aff);
+    --danger: var(--tg-theme-destructive-text-color, #ff3b30);
+    --sep: rgba(128, 128, 128, .22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: var(--tg-theme-secondary-bg-color, #000000);
+      --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #1c1c1e));
+      --text: var(--tg-theme-text-color, #ffffff);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 16px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Segoe UI", sans-serif;
+    padding: 0 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    -webkit-font-smoothing: antialiased;
+  }
+  [hidden] { display: none !important; }
+
+  h1 { font-size: 28px; line-height: 1.15; margin: 0; padding: 20px 4px 4px; font-weight: 700; letter-spacing: -.3px; }
+  .subtitle { margin: 0; padding: 0 4px 12px; color: var(--hint); font-size: 14px; min-height: 1.35em; }
+
+  .group { background: var(--card); border-radius: 12px; overflow: hidden; }
+  .group-title { padding: 18px 16px 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .3px; color: var(--hint); }
+  .footnote { margin: 8px 16px 0; font-size: 13px; color: var(--hint); }
+  .error { margin: 8px 16px 0; font-size: 14px; color: var(--danger); }
+
+  /* список запросов */
+  .item { display: flex; align-items: center; gap: 8px; padding: 12px 4px 12px 16px; }
+  .item + .item { border-top: 1px solid var(--sep); }
+  .item-main { flex: 1; min-width: 0; }
+  .item-title { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+  .item-meta { margin-top: 2px; font-size: 14px; color: var(--hint); }
+  .chip { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 600;
+          color: var(--accent); background: rgba(128, 128, 128, .14); }
+  .icon-btn { flex: none; width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent;
+              font-size: 20px; cursor: pointer; }
+  .icon-btn:active { background: rgba(128, 128, 128, .18); }
+
+  .empty { text-align: center; padding: 48px 24px; color: var(--hint); }
+  .empty .big { font-size: 44px; margin-bottom: 8px; }
+  .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 4px; }
+
+  .banner { margin: 0 0 12px; padding: 12px 16px; border-radius: 12px; background: var(--card); font-size: 14px; }
+  .banner button { margin-left: 8px; border: 0; background: none; color: var(--link); font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
+
+  /* форма */
+  .row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; }
+  .row + .row { border-top: 1px solid var(--sep); }
+  .row > span { flex: none; min-width: 72px; }
+  .row input, .row select {
+    flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent;
+    color: var(--text); font: inherit; font-size: 16px; /* 16px — чтобы iOS не увеличивал масштаб */
+    text-align: right; -webkit-appearance: none; appearance: none;
+  }
+  .row input.left { text-align: left; }
+  .row input::placeholder { color: var(--hint); opacity: .8; }
+  .group.disabled { opacity: .5; }
+
+  #toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 16px; border-radius: 12px; text-align: center; font-size: 15px;
+    background: rgba(40, 40, 40, .94); color: #fff;
+    opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s, transform .2s;
+  }
+  #toast.show { opacity: 1; transform: none; }
+
+  #nope { padding: 64px 24px; text-align: center; color: var(--hint); }
+</style>
+</head>
+<body>
+
+<div id="nope" hidden>
+  <div style="font-size:44px">📱</div>
+  <p><b style="color:var(--text)">Откройте приложение из Telegram</b><br>
+  Нажмите кнопку «Запросы» в чате с ботом или команду /app.</p>
+</div>
+
+<main id="app" hidden>
+  <section id="view-list">
+    <h1>Отслеживание</h1>
+    <p class="subtitle" id="subtitle"></p>
+    <div class="banner" id="banner" hidden><span id="banner-text"></span><button type="button" id="banner-retry">Повторить</button></div>
+    <div class="group" id="list"></div>
+    <div class="empty" id="empty" hidden>
+      <div class="big">🔎</div>
+      <b>Пока ничего не отслеживается</b>
+      Нажмите «Добавить запрос» внизу, и новые объявления будут приходить в чат с ботом.
+    </div>
+    <p class="footnote" id="list-note" hidden>Новые лоты приходят сообщениями в чат. Здесь — только управление запросами.</p>
+  </section>
+
+  <section id="view-form" hidden>
+    <h1>Новый запрос</h1>
+    <p class="subtitle">Бот сам добавит синонимы и сленг к названию</p>
+    <form id="form" novalidate autocomplete="off">
+      <div class="group">
+        <label class="row"><span>Название</span>
+          <input id="f-name" class="left" type="text" maxlength="100" placeholder="iPhone 13" enterkeyhint="done"
+                 autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      </div>
+
+      <div class="group-title">Цена, BYN</div>
+      <div class="group">
+        <label class="row"><span>От</span>
+          <input id="f-min" type="text" inputmode="decimal" placeholder="любая" enterkeyhint="next"></label>
+        <label class="row"><span>До</span>
+          <input id="f-max" type="text" inputmode="decimal" placeholder="любая" enterkeyhint="done"></label>
+      </div>
+      <p class="error" id="form-error" hidden></p>
+      <p class="footnote">Если задан фильтр цены, объявления без указанной цены («договорная») не показываются.</p>
+
+      <div class="group-title">Дополнительно</div>
+      <div class="group disabled">
+        <label class="row"><span>Регион</span>
+          <select disabled><option>Вся Беларусь</option></select></label>
+        <label class="row"><span>Категория</span>
+          <select disabled><option>Любая</option></select></label>
+      </div>
+      <p class="footnote">Выбор региона и категории появится позже.</p>
+    </form>
+  </section>
+</main>
+
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const $ = (id) => document.getElementById(id);
+
+  // ── не в Telegram — показываем подсказку ──
+  if (!tg || !tg.initData) {
+    $('nope').hidden = false;
+    return;
+  }
+  $('app').hidden = false;
+
+  // ── интеграция с Telegram ──
+  tg.ready();
+  tg.expand();
+  try { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch (e) {}
+  try { if (tg.disableVerticalSwipes) tg.disableVerticalSwipes(); } catch (e) {}
+
+  const hf = tg.HapticFeedback;
+  const haptic = {
+    tap:    () => { try { hf && hf.impactOccurred('light'); } catch (e) {} },
+    ok:     () => { try { hf && hf.notificationOccurred('success'); } catch (e) {} },
+    err:    () => { try { hf && hf.notificationOccurred('error'); } catch (e) {} },
+  };
+
+  // ── состояние ──
+  let view = 'list';
+  let watches = [];
+  let limit = 15;
+  let busy = false;
+  let mainHandler = null;
+  let tick = 0;
+
+  // ── утилиты ──
+  function h(tag, attrs, ...children) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v);
+    }
+    for (const c of children) el.append(c);
+    return el; // текст добавляется как текстовый узел — XSS исключён
+  }
+
+  const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+
+  function priceLabel(w) {
+    const lo = w.price_min, hi = w.price_max;
+    if (lo != null && hi != null) return `${nf.format(lo)}–${nf.format(hi)} BYN`;
+    if (lo != null) return `от ${nf.format(lo)} BYN`;
+    if (hi != null) return `до ${nf.format(hi)} BYN`;
+    return 'Любая цена';
+  }
+
+  function fmtDate(ts) {
+    const d = new Date(ts * 1000);
+    const opts = { day: 'numeric', month: 'long' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString('ru-RU', opts);
+  }
+
+  function parseNum(s) {
+    s = String(s).trim().replace(',', '.').replace(/\s/g, '');
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  let toastTimer = 0;
+  function toast(text) {
+    const el = $('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: { 'Authorization': 'tma ' + tg.initData, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) throw new Error((data && data.error) || `Ошибка сервера (${res.status})`);
+    return data;
+  }
+
+  // ── главная кнопка Telegram (MainButton) ──
+  function setMain(text, handler, enabled) {
+    const mb = tg.MainButton;
+    if (mainHandler) mb.offClick(mainHandler);
+    mainHandler = handler;
+    mb.onClick(handler);
+    mb.setText(text);
+    if (enabled) mb.enable(); else mb.disable();
+    mb.hideProgress();
+    mb.show();
+  }
+  function setMainEnabled(enabled) {
+    if (enabled) tg.MainButton.enable(); else tg.MainButton.disable();
+  }
+
+  // ── экран: список ──
+  function renderList() {
+    const list = $('list');
+    list.replaceChildren();
+    const has = watches.length > 0;
+    list.hidden = !has;
+    $('empty').hidden = has;
+    $('list-note').hidden = !has;
+    $('subtitle').textContent = has ? `Активных запросов: ${watches.length} из ${limit}` : '';
+    for (const w of [...watches].reverse()) list.append(card(w));
+    if (view === 'list') refreshMain();
+  }
+
+  function card(w) {
+    const meta = 'Добавлен ' + fmtDate(w.created_at) + (w.seeded ? '' : ' · ⏳ запоминаю текущие');
+    return h('div', { class: 'item' },
+      h('div', { class: 'item-main' },
+        h('div', { class: 'item-title' }, w.name),
+        h('div', { class: 'item-meta' }, meta),
+        h('span', { class: 'chip' }, priceLabel(w))),
+      h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Удалить', onclick: () => confirmDelete(w) }, '🗑'));
+  }
+
+  function refreshMain() {
+    if (watches.length >= limit) setMain('Достигнут лимит запросов', () => {}, false);
+    else setMain('＋ Добавить запрос', openForm, true);
+  }
+
+  function confirmDelete(w) {
+    haptic.tap();
+    const run = (ok) => { if (ok) doDelete(w); };
+    const text = `Удалить запрос «${w.name}»?`;
+    if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.2')) tg.showConfirm(text, run);
+    else run(window.confirm(text));
+  }
+
+  async function doDelete(w) {
+    try {
+      await api('DELETE', `/api/watches/${w.id}`);
+      haptic.ok();
+      watches = watches.filter((x) => x.id !== w.id);
+      renderList();
+    } catch (e) {
+      haptic.err();
+      toast(e.message);
+      load(true);
+    }
+  }
+
+  async function load(silent) {
+    try {
+      const data = await api('GET', '/api/watches');
+      watches = data.watches;
+      limit = data.limit || limit;
+      $('banner').hidden = true;
+      if (view === 'list') renderList();
+    } catch (e) {
+      if (!silent) {
+        $('banner-text').textContent = e.message;
+        $('banner').hidden = false;
+      }
+    }
+  }
+
+  // ── экран: форма ──
+  function readForm() {
+    return {
+      name: $('f-name').value.trim().replace(/\s+/g, ' '),
+      min: parseNum($('f-min').value),
+      max: parseNum($('f-max').value),
+    };
+  }
+
+  function validateForm() {
+    const { name, min, max } = readForm();
+    let err = '';
+    if (Number.isNaN(min) || Number.isNaN(max)) err = 'Цена должна быть числом';
+    else if ((min !== null && min < 0) || (max !== null && max < 0)) err = 'Цена не может быть отрицательной';
+    else if (min !== null && max !== null && min > max) err = 'Минимальная цена больше максимальной';
+    $('form-error').textContent = err;
+    $('form-error').hidden = !err;
+    const ok = !!name && !err;
+    if (view === 'form' && !busy) setMainEnabled(ok);
+    return ok;
+  }
+
+  function openForm() {
+    haptic.tap();
+    view = 'form';
+    $('view-list').hidden = true;
+    $('view-form').hidden = false;
+    $('form').reset();
+    $('form-error').hidden = true;
+    tg.BackButton.show();
+    setMain('Сохранить и запустить отслеживание', submit, false);
+    window.scrollTo(0, 0);
+    $('f-name').focus();
+  }
+
+  function closeForm() {
+    view = 'list';
+    $('view-form').hidden = true;
+    $('view-list').hidden = false;
+    tg.BackButton.hide();
+    if (document.activeElement) document.activeElement.blur();
+    renderList();
+    window.scrollTo(0, 0);
+  }
+
+  async function submit() {
+    if (busy) return;
+    if (!validateForm()) { haptic.err(); return; }
+    const { name, min, max } = readForm();
+    busy = true;
+    tg.MainButton.showProgress(false);
+    if (document.activeElement) document.activeElement.blur();
+    try {
+      const w = await api('POST', '/api/watches', { name, price_min: min, price_max: max });
+      haptic.ok();
+      watches.push(w);
+      busy = false;
+      closeForm();
+      toast('Запрос добавлен. Запоминаю текущие объявления…');
+      setTimeout(() => load(true), 3000);
+    } catch (e) {
+      busy = false;
+      haptic.err();
+      tg.MainButton.hideProgress();
+      $('form-error').textContent = e.message;
+      $('form-error').hidden = false;
+    }
+  }
+
+  // ── подписки ──
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+  for (const id of ['f-name', 'f-min', 'f-max']) $(id).addEventListener('input', validateForm);
+  tg.BackButton.onClick(() => { if (view === 'form' && !busy) { haptic.tap(); closeForm(); } });
+  $('banner-retry').addEventListener('click', () => { haptic.tap(); load(false); });
+
+  // пока есть «засеваемые» запросы — обновляем статус; иначе раз в ~30 с
+  setInterval(() => {
+    if (view !== 'list' || document.hidden) return;
+    tick += 1;
+    if (watches.some((w) => !w.seeded) || tick % 6 === 0) load(true);
+  }, 5000);
+
+  // ── старт ──
+  renderList();
+  load(false);
+})();
+</script>
+</body>
+</html>
